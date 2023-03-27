@@ -1,11 +1,93 @@
+import LocationListItem from '@/components/LocationListItem';
+import { LatLang, LocationData } from '@/types/Location';
+import { Form, Input, Button, List, Empty, Typography, Tag, Space, message, Spin } from 'antd'
 import Head from 'next/head'
-import Image from 'next/image'
-import { Inter } from 'next/font/google'
-import styles from '@/styles/Home.module.css'
+import { useState } from 'react';
 
-const inter = Inter({ subsets: ['latin'] })
+const formItemLayout = {
+  labelCol: { span: 6 },
+  wrapperCol: { span: 12 },
+};
+
+const formTailLayout = {
+  labelCol: { span: 6 },
+  wrapperCol: { span: 12, offset: 6 },
+};
+
+const PRAGUE: LatLang = { latitude: 50.0833, longitude: 14.4667 };
+const LONDON: LatLang = { latitude: 51.507359, longitude: -0.136439 };
+const RIO_DE_JANEIRO: LatLang = { latitude: -22.908333, longitude: -43.196388 };
+const MIAMI: LatLang = { latitude: 25.761681, longitude: -80.191788 };
+const BANGKOK: LatLang = { latitude: 13.668217, longitude: 100.614021 };
+const MADRID: LatLang = { latitude: 40.416775, longitude: -3.703790 };
+
+const BASE_API_URL = 'https://api.open-meteo.com/v1/forecast?current_weather=true';
+
+type WeatherResponse = {
+  latitude: number;
+  longitude: number;
+  generationtime_ms: number;
+  utc_offset_seconds: number;
+  timezone: string;
+  timezone_abbreviation: string;
+  elevation: number;
+  current_weather: {
+    temperature: number;
+    windspeed: number;
+    winddirection: number;
+    weathercode: number;
+    time: string;
+  }
+}
+
 
 export default function Home() {
+
+  const [form] = Form.useForm<LatLang>();
+  const [searchedLocations, setSearchedLocations] = useState<LocationData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = () => {
+    form.validateFields().then((validatedFormData) => {
+      setIsLoading(true);
+
+      const apiUrl = new URL(BASE_API_URL);
+      apiUrl.searchParams.append('latitude', validatedFormData.latitude.toString());
+      apiUrl.searchParams.append('longitude', validatedFormData.longitude.toString());
+
+      fetch(apiUrl)
+        .then((response) => {
+          return response.json();
+        })
+        .then((weatherData: WeatherResponse) => {
+          setSearchedLocations((prev) => [
+            ...prev, {
+              latitude: validatedFormData.latitude,
+              longitude: validatedFormData.longitude,
+              temperature: weatherData.current_weather.temperature,
+              key: weatherData.generationtime_ms.toString()
+            }
+          ]);
+
+          form.resetFields();
+        })
+        .catch(() => {
+          message.error('There was an error while getting the temperature');
+        })
+        .finally(() => {
+          setIsLoading(false);
+        })
+    })
+  }
+
+  const handleTagClick = (location: LatLang) => {
+    form.setFieldsValue({ ...location });
+  }
+
+  const handleRemove = (keyToRemove: string) => {
+    setSearchedLocations((prev) => prev.filter((item) => item.key !== keyToRemove));
+  }
+
   return (
     <>
       <Head>
@@ -14,110 +96,85 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-      <main className={styles.main}>
-        <div className={styles.description}>
-          <p>
-            Get started by editing&nbsp;
-            <code className={styles.code}>src/pages/index.tsx</code>
-          </p>
-          <div>
-            <a
-              href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              By{' '}
-              <Image
-                src="/vercel.svg"
-                alt="Vercel Logo"
-                className={styles.vercelLogo}
-                width={100}
-                height={24}
-                priority
-              />
-            </a>
-          </div>
-        </div>
-
-        <div className={styles.center}>
-          <Image
-            className={styles.logo}
-            src="/next.svg"
-            alt="Next.js Logo"
-            width={180}
-            height={37}
-            priority
-          />
-          <div className={styles.thirteen}>
-            <Image
-              src="/thirteen.svg"
-              alt="13"
-              width={40}
-              height={31}
-              priority
-            />
-          </div>
-        </div>
-
-        <div className={styles.grid}>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
+      <main style={{ display: 'flex', justifyContent: 'center', flexDirection: 'column' }}>
+        <Space
+          size={[0, 8]}
+          style={{ width: 600, alignSelf: 'center' }}
+        >
+          <div style={{ marginRight: '.5rem' }}>Favourite locations:</div>
+          <Tag.CheckableTag key="Prague" checked={false} onClick={() => handleTagClick(PRAGUE)}>Prague</Tag.CheckableTag>
+          <Tag.CheckableTag key="London" checked={false} onClick={() => handleTagClick(LONDON)}>London</Tag.CheckableTag>
+          <Tag.CheckableTag key="Rio de Janeiro" checked={false} onClick={() => handleTagClick(RIO_DE_JANEIRO)}>Rio de Janeiro</Tag.CheckableTag>
+          <Tag.CheckableTag key="Miami" checked={false} onClick={() => handleTagClick(MIAMI)}>Miami</Tag.CheckableTag>
+          <Tag.CheckableTag key="Bangkok" checked={false} onClick={() => handleTagClick(BANGKOK)}>Bangkok</Tag.CheckableTag>
+          <Tag.CheckableTag key="Madrid" checked={false} onClick={() => handleTagClick(MADRID)}>Madrid</Tag.CheckableTag>
+        </Space>
+        <Form
+          form={form}
+          style={{ width: 600, alignSelf: 'center', marginTop: '1rem' }}
+        >
+          <Form.Item
+            name='latitude'
+            label='Latitude'
+            {...formItemLayout}
+            rules={[
+              { required: true, message: 'Latitude is required' },
+              () => ({
+                validator(_, value) {
+                  if (value > 90) {
+                    return Promise.reject('Latitude must be smaller than 90°')
+                  }
+                  if (value < -90) {
+                    return Promise.reject('Latitude must be greater than -90°')
+                  }
+                  return Promise.resolve()
+                }
+              })
+            ]}
           >
-            <h2 className={inter.className}>
-              Docs <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Find in-depth information about Next.js features and&nbsp;API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
+            <Input type='number' disabled={isLoading} />
+          </Form.Item>
+          <Form.Item
+            name='longitude'
+            label='Longitude'
+            {...formItemLayout}
+            rules={[
+              { required: true, message: 'Longitude is required' },
+              () => ({
+                validator(_, value) {
+                  if (value > 180) {
+                    return Promise.reject('Longitude must be smaller than 180°')
+                  }
+                  if (value < -180) {
+                    return Promise.reject('Longitude must be greater than -180°')
+                  }
+                  return Promise.resolve()
+                }
+              })
+            ]}
           >
-            <h2 className={inter.className}>
-              Learn <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Learn about Next.js in an interactive course with&nbsp;quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
+            <Input type='number' disabled={isLoading} />
+          </Form.Item>
+          <Form.Item
+            label=''
+            {...formTailLayout}
           >
-            <h2 className={inter.className}>
-              Templates <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Discover and deploy boilerplate example Next.js&nbsp;projects.
-            </p>
-          </a>
+            <Button onClick={handleSubmit} loading={isLoading}>Search</Button>
+          </Form.Item>
+        </Form>
 
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2 className={inter.className}>
-              Deploy <span>-&gt;</span>
-            </h2>
-            <p className={inter.className}>
-              Instantly deploy your Next.js site to a shareable URL
-              with&nbsp;Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
+        <List
+          bordered
+          dataSource={searchedLocations}
+          style={{ width: 600, alignSelf: 'center', marginTop: '1rem', maxHeight: 600, overflow: 'auto' }}
+          locale={{
+            emptyText: <Empty description={<Typography.Text type='secondary'>No location searched yet</Typography.Text>} />
+          }}
+          renderItem={(item) => (
+            <LocationListItem location={item} onClick={() => handleRemove(item.key)} />
+          )}
+        />
+      </main >
     </>
   )
 }
